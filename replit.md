@@ -1,45 +1,58 @@
-# [Project name]
+# DoveLoButtoAI (EcoGlass Bot)
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Telegram bot for Italian waste sorting — snap a photo of any trash and get instant disposal instructions in Italian.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `python bot/ecoglass_bot.py` — run the Telegram bot (dev)
+- Workflow: "EcoGlass Bot" — `python bot/ecoglass_bot.py`
+- Required env: `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.11, `python-telegram-bot==22.8`, `openai`, `httpx`
+- SQLite (stdlib) for waste rules DB + user analytics
+- pnpm workspaces for monorepo (API server + mockup sandbox)
+- GPT-4.1 Vision for photo analysis
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `bot/ecoglass_bot.py` — main bot (handlers, OpenAI integration, inline keyboards)
+- `bot/waste_db.py` — SQLite DB (36 seeded waste objects, user stats, lookup, auto-save)
+- `bot/github_client.py` — GitHub push via Node.js bridge
+- `.local/skills/deployment/SKILL.md` — deployment skill reference
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **All OpenAI calls are async-safe** via `asyncio.to_thread()` + `asyncio.wait_for(timeout=30)` — direct sync calls block the event loop and silence the bot
+- **Fire-and-forget DB tracking** — user analytics and auto-save run in background threads; never block replies
+- **Global + per-handler error handlers** — `app.add_error_handler()` catches uncaught exceptions; every command/message/callback has its own try/except for graceful degradation
+- **Food pre-classification** — ambiguous items trigger inline clarifying questions before full vision analysis, saving tokens
+- **Local SQLite caching** — answers cached after first OpenAI call; future queries return instantly without API cost
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Send a photo → bot identifies waste + tells you which bin (indifferenziata, plastica, carta, vetro, umido, etc.)
+- Text search → type any waste item name for instant lookup
+- `/comune` → set your municipality for local rules
+- `/stats` → analytics dashboard (users, cache hits, OpenAI calls, money saved)
+- Food ambiguity → inline buttons (e.g., "Pizza intera" vs "Solo scatola")
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Bot speaks **Italian only**
+- Waste rules are **tailored per Comune**
+- Inline buttons preferred over text menus for clarifying questions
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- `TELEGRAM_BOT_TOKEN` and `OPENAI_API_KEY` must be set as Secrets (not plain env vars)
+- Never use sync OpenAI calls in async handlers — always wrap in `asyncio.to_thread()`
+- SQLite DB lives in working directory (`waste_sorting.db`) — persists across restarts but not across fresh Replit containers unless committed
+- Deployment target must be **VM (Always Running)** for Telegram long-polling bots — autoscale will kill the bot between requests
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `pnpm-workspace` skill for workspace structure
+- See the `deployment` skill for publish/deploy configuration
+- GitHub repo: https://github.com/tatiananoian87-boop/DoveLoButtoAI
