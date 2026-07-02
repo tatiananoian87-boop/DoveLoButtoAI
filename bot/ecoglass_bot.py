@@ -729,10 +729,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_comune(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data["awaiting_comune"] = True
-    context.user_data.pop("pending_clarification", None)
-    context.user_data.pop("pending_food", None)
-    await ask_for_comune(update)
+    try:
+        context.user_data["awaiting_comune"] = True
+        context.user_data.pop("pending_clarification", None)
+        context.user_data.pop("pending_food", None)
+        await ask_for_comune(update)
+    except Exception:
+        logger.exception("[cmd_comune] Unhandled exception (user=%s)", update.effective_user.id)
 
 
 def _track_user(user: object) -> None:
@@ -890,22 +893,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hidden admin command — /stats"""
-    s = await asyncio.to_thread(waste_db.get_stats)
-    avg_s = s["avg_response_ms"] / 1000 if s["avg_response_ms"] else 0
-    text = (
-        "📊 *Statistiche EcoGlass Bot*\n\n"
-        f"👥 Utenti totali: *{s['total_users']}*\n"
-        f"🆕 Nuovi utenti oggi: *{s['new_today']}*\n"
-        f"🟢 Utenti attivi (24h): *{s['active_24h']}*\n"
-        f"📷 Foto elaborate: *{s['photos_processed']}*\n"
-        f"💬 Ricerche testo: *{s['text_searches']}*\n"
-        f"⚡ Cache hits: *{s['cache_hits']}*\n"
-        f"🤖 Richieste OpenAI oggi: *{s['openai_today']}*\n"
-        f"📅 Richieste OpenAI totali: *{s['openai_total']}*\n"
-        f"💰 Risparmiato stimato: *${s['money_saved_usd']:.2f}*\n"
-        f"⏱ Tempo medio risposta: *{avg_s:.1f}s*"
-    )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    try:
+        s = await asyncio.to_thread(waste_db.get_stats)
+        avg_s = s["avg_response_ms"] / 1000 if s["avg_response_ms"] else 0
+        text = (
+            "📊 *Statistiche EcoGlass Bot*\n\n"
+            f"👥 Utenti totali: *{s['total_users']}*\n"
+            f"🆕 Nuovi utenti oggi: *{s['new_today']}*\n"
+            f"🟢 Utenti attivi (24h): *{s['active_24h']}*\n"
+            f"📷 Foto elaborate: *{s['photos_processed']}*\n"
+            f"💬 Ricerche testo: *{s['text_searches']}*\n"
+            f"⚡ Cache hits: *{s['cache_hits']}*\n"
+            f"🤖 Richieste OpenAI oggi: *{s['openai_today']}*\n"
+            f"📅 Richieste OpenAI totali: *{s['openai_total']}*\n"
+            f"💰 Risparmiato stimato: *${s['money_saved_usd']:.2f}*\n"
+            f"⏱ Tempo medio risposta: *{avg_s:.1f}s*"
+        )
+        await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception:
+        logger.exception("[cmd_stats] Unhandled exception (user=%s)", update.effective_user.id)
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -913,6 +919,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     data    = query.data
     user_id = query.from_user.id
+
+    try:
+        _track_user(query.from_user)
+    except Exception:
+        pass
 
     # ── Food choice buttons ───────────────────────────────────────────────
     if data.startswith("food:"):
@@ -944,21 +955,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     # ── Standard waste category buttons ──────────────────────────────────
-    info = WASTE_INFO.get(data)
-    if info:
-        await query.edit_message_text(
-            info,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ Altra categoria", callback_data="menu")]]
-            ),
-        )
-    elif data == "menu":
-        await query.edit_message_text(
-            "Seleziona la categoria del rifiuto:",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(WASTE_BUTTONS),
-        )
+    try:
+        info = WASTE_INFO.get(data)
+        if info:
+            await query.edit_message_text(
+                info,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ Altra categoria", callback_data="menu")]]
+                ),
+            )
+        elif data == "menu":
+            await query.edit_message_text(
+                "Seleziona la categoria del rifiuto:",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(WASTE_BUTTONS),
+            )
+    except Exception:
+        logger.exception("[callback] Unhandled exception (user=%s)", user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -981,6 +995,16 @@ def main() -> None:
     )
 
     app = Application.builder().token(tg_token).build()
+
+    # Global error handler — guarantees the bot never dies from uncaught exceptions
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logger.exception(
+            "[global-error] Unhandled exception (update=%s): %s",
+            getattr(update, "update_id", None),
+            context.error,
+        )
+
+    app.add_error_handler(error_handler)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("comune", cmd_comune))
