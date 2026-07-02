@@ -44,12 +44,21 @@ Telegram bot for Italian waste sorting — snap a photo of any trash and get ins
 - Waste rules are **tailored per Comune**
 - Inline buttons preferred over text menus for clarifying questions
 
+## Deployment
+
+1. Open the **Publish** panel in Replit
+2. Set **Deployment type** to `Always Running (VM)` — required for Telegram long-polling bots
+3. Set **Run command** to `python bot/ecoglass_bot.py`
+4. Verify both secrets (`TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`) are available in production
+5. Click **Publish**
+
 ## Gotchas
 
 - `TELEGRAM_BOT_TOKEN` and `OPENAI_API_KEY` must be set as Secrets (not plain env vars)
 - Never use sync OpenAI calls in async handlers — always wrap in `asyncio.to_thread()`
 - SQLite DB lives in working directory (`waste_sorting.db`) — persists across restarts but not across fresh Replit containers unless committed
 - Deployment target must be **VM (Always Running)** for Telegram long-polling bots — autoscale will kill the bot between requests
+- If publishing fails, check that `.replit` has `deploymentTarget = "vm"` in the `[deployment]` section
 
 ## Pointers
 
