@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Push the entire project to GitHub via the Contents API.
-Skips generated/ignored files and uses the working Node bridge.
+Resume pushing the project to GitHub via the Contents API.
+Skips files that already exist in the repo.
 """
 import os
 import sys
-import json
 import time
 from pathlib import Path
 
@@ -30,7 +29,6 @@ SKIP_NAMES = {"pnpm-lock.yaml", ".gitignore", "replit-git-askpass",
 
 
 def should_skip(p: Path) -> bool:
-    parts = p.parts
     if any(prefix in str(p) for prefix in SKIP_PREFIXES):
         return True
     if p.suffix in SKIP_EXTS:
@@ -46,7 +44,6 @@ def main() -> None:
     for p in root.rglob("*"):
         if p.is_file() and not should_skip(p):
             files.append(p)
-
     files.sort()
     total = len(files)
     print(f"Found {total} files to push.")
@@ -56,7 +53,6 @@ def main() -> None:
         try:
             content = p.read_text(encoding="utf-8", errors="replace")
         except Exception:
-            # Binary file — skip for now (Contents API is text-only)
             print(f"[{i}/{total}] SKIP (binary): {rel}")
             continue
 
@@ -67,9 +63,12 @@ def main() -> None:
             )
             print(f"[{i}/{total}] ✅ {rel}")
         except Exception as exc:
-            print(f"[{i}/{total}] ❌ {rel}: {exc}")
-        # Rate-limit ourselves: 1 req/sec is well under GitHub's limit
-        time.sleep(0.8)
+            err = str(exc)
+            if "already exists" in err or "sha" in err.lower():
+                print(f"[{i}/{total}] ✅ {rel} (already there)")
+            else:
+                print(f"[{i}/{total}] ❌ {rel}: {err}")
+        time.sleep(0.3)
 
     print("\nDone.")
 
